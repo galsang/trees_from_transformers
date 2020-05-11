@@ -51,6 +51,9 @@ class Measure(object):
 
     @staticmethod
     def kl(p, q):
+        eps = 1e-30
+        p, q = p + eps, q + eps
+        p, q = p / p.sum(dim=-1, keepdim=True), q / q.sum(dim=-1, keepdim=True)
         kl = F.kl_div(torch.log(q), p, reduction='none').sum(dim=-1)
         # kl = (p * (torch.log(p) - torch.log(q))).sum(dim=-1)
         # To deal with the numerical instability of the KL-div function in PyTorch
