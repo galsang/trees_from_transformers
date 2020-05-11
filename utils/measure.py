@@ -50,39 +50,25 @@ class Measure(object):
         return torch.norm(l_hidden - r_hidden, p=2, dim=-1)
 
     @staticmethod
-    def left_kl(l_att, r_att):
-        # (n_layers, n_att, seq_len-1, seq_len) -> (n_layers, n_att, seq_len-1)
-        # or
-        # (n_layers, seq_len-1, seq_len) -> (n_layers, seq_len-1)
-        epsilon = 1e-8
-        l_att += epsilon
-        l_att /= l_att.sum(dim=-1, keepdim=True)
-        # In PyTorch ver. implementation of KL divergence loss,
-        # the first argument is assumed to be 'log-probabilities'
-        kl = F.kl_div(torch.log(l_att), r_att, reduction='none').sum(dim=-1)
+    def kl(p, q):
+        kl = F.kl_div(torch.log(q), p, reduction='none').sum(dim=-1)
+        # kl = (p * (torch.log(p) - torch.log(q))).sum(dim=-1)
+        # To deal with the numerical instability of the KL-div function in PyTorch
+        if (kl < 0).sum() > 0:
+            kl = kl * (1 - (kl < 0).float())
         assert torch.isinf(kl).sum() == 0
-        return kl
-
-    @staticmethod
-    def right_kl(l_att, r_att):
-        # (n_layers, n_att, seq_len-1, seq_len) -> (n_layers, n_att, seq_len-1)
-        # or
-        # (n_layers, seq_len-1, seq_len) -> (n_layers, seq_len-1)
-        epsilon = 1e-8
-        r_att += epsilon
-        r_att /= r_att.sum(dim=-1, keepdim=True)
-        # In PyTorch ver. implementation of KL divergence loss,
-        # the first argument is assumed to be 'log-probabilities'
-        kl = F.kl_div(torch.log(r_att), l_att, reduction='none').sum(dim=-1)
-        assert torch.isinf(kl).sum() == 0
+        assert torch.isnan(kl).sum() == 0
         return kl
 
     @staticmethod
     def jsd(l_att, r_att):
         m = (l_att + r_att) / 2
-        l_kl = Measure.left_kl(l_att, m)
-        r_kl = Measure.right_kl(r_att, m)
-        return torch.sqrt((l_kl + r_kl) / 2)
+        l_kl = Measure.kl(l_att, m)
+        r_kl = Measure.kl(r_att, m)
+        d = torch.sqrt((l_kl + r_kl) / 2)
+        assert (d < 0).sum() == 0
+        assert torch.isnan(d).sum() == 0
+        return d
 
     @staticmethod
     def hellinger(l_att, r_att):
